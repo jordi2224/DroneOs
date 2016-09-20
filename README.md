@@ -17,5 +17,5 @@ The main library used with this code is wirinPi.h by user Drogon, see: git.drogo
 
 ##License
 
-This softaware is free for modification, distribution and use but WITHOUT ANY WARRANTY and shall be used for Good and not Evil.
+This software is free for modification, distribution and use but WITHOUT ANY WARRANTY and shall be used for Good and not Evil.
 
