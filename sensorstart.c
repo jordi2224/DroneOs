@@ -1,5 +1,6 @@
 #include <wiringPiI2C.h>
 #include <wiringPi.h>
+#include <stdio.h>
 
 	char ACC_ADD = 0x53;
 		char ACC_X0 = 0x32;
@@ -25,13 +26,11 @@
 		char COMP_Z0 = 0x07;
 		char COMP_Z1 = 0x08;
 
-	char MEM_ADD = 0x50;
-		
 	int gyrox_offset = 0;
 	int gyroy_offset = 0;
 	int gyroz_offset = 0;
 
-	
+
 void FetchAcc(short acc_raw[]);	//Fetches raw data from ADXL345 accelerometer
 
 void FetchComp(short comp_raw[]);	//Fetches raw data from HMC5883L magnetometer
@@ -45,38 +44,41 @@ int main(){
 
 	short acc_raw[3];
 	short comp_raw[3];
-	int fd1, fd2;
+	int fd1;
 
 	if(TestSensors()){
 
+		fd1 = wiringPiI2CSetup(0x50);
+		wiringPiI2CWriteReg8(fd1, 0x00, 0x66);
+		printf("\nDONE!\n");
+
 		SetupSensors();
-		
-		fd1 = wiringPiI2CSetup(MEM_ADD);
-		wiringPiI2CWriteReg8(fd1, 0x00, 1);
-		
-		for(;;){
+
+		//for(;;){
 
 			FetchAcc(acc_raw);
 			FetchComp(comp_raw);
 
-			fd2 = wiringPiI2CSetup(MEM_ADD+1);
-			wiringPiI2CWriteReg16(fd2, 0x00, acc_raw[0]);
-			wiringPiI2CWriteReg16(fd2, 0x02, acc_raw[1]);
-			wiringPiI2CWriteReg16(fd2, 0x04, acc_raw[2]);
-			
-			//TODO write bearing to EEPROM
+			fd1 = wiringPiI2CSetup(0x50);
+			wiringPiI2CWriteReg16(fd1, 0x10, acc_raw[0]);
+			delay(2);
+			fd1 = wiringPiI2CSetup(0x50);
+			wiringPiI2CWriteReg16(fd1, 0x20, acc_raw[1]);
+			printf("\n%d", acc_raw[1]);
+			delay(2);
+			fd1 = wiringPiI2CSetup(0x50);
+			wiringPiI2CWriteReg16(fd1, 0x30, acc_raw[2]);
 
 			delay(2);
-		}
+		//}
 
 	}else{
-		
-		fd1 = wiringPiI2CSetup(MEM_ADD);
-		wiringPiI2CWriteReg8(fd1, 0x00, 0);
+
+		//fd1 = wiringPiI2CSetup(0x50);
+		//wiringPiI2CWriteReg8(fd1, 0x00, 0);
 
 	}
-	
-	
+
 	return 0;
 }
 
@@ -107,8 +109,8 @@ void SetupSensors(){
 	//Sensor setup:
 
 		//Acc:
-		int fd1 = wiringPiI2CSetup(ACC_ADD);
-		wiringPiI2CWriteReg8(fd1, 0x2D, 0x08);	//Sets accelerometer to 2g range
+		int fd2 = wiringPiI2CSetup(ACC_ADD);
+		wiringPiI2CWriteReg8(fd2, 0x2D, 0x08);	//Sets accelerometer to 2g range
 
 		//Comp
 		int fd3 = wiringPiI2CSetup(COMP_ADD);
@@ -118,14 +120,14 @@ void SetupSensors(){
 }
 
 int TestSensors(){
-	
+
 	int id_1;
 	int id_3;
 	int res;
-	
+
 	int fd1 = wiringPiI2CSetup(ACC_ADD);
 	int fd3 = wiringPiI2CSetup(COMP_ADD);
-	
+
 	id_1 = wiringPiI2CReadReg8(fd1, 0x00);
 	id_3 = wiringPiI2CReadReg8(fd3, 0x00);
 
