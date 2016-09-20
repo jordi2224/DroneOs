@@ -1,0 +1,12 @@
+led_1: cpu	0
+led_2: battery	1
+led_3: sensors	2
+led_4: comms	3
+led_5: motors	4
+
+4pwm pins
+A	11
+B	12
+C	13
+D	14
+
