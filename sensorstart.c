@@ -58,12 +58,11 @@ int main(){
 	
 	key = 2000;
 
-	char *shm, *s;
 	size = 42;
 
-	short acc_raw[3];
-	short comp_raw[3];
-	short gyro_raw[3];
+	short acc_raw[6];
+	short comp_raw[6];
+	short gyro_raw[6];
 
 
 	if((shmid = shmget(key, size, IPC_CREAT | 0666)) < 0){
@@ -74,8 +73,6 @@ int main(){
 		perror("shmat");
 	}
 
-	s = shm;
-	*s = 0;
 
 	if(TestSensors()){
 
@@ -86,10 +83,25 @@ int main(){
 		for(;;){
 
 			FetchAcc(acc_raw);
-			FetchComp(comp_raw);
-			FetchGyro(gyro_raw);
+			s=shm+1;
+			*s = acc_raw[0];
+			s=shm+2;
+			*s = acc_raw[1];
+			s=shm+3;
+			*s = acc_raw[2];
+			s=shm+4;
+			*s = acc_raw[3];
+			s=shm+5;
+			*s = acc_raw[4];
+			s=shm+6;
+			*s = acc_raw[5];
 
-			delay(2);
+
+			//FetchComp(comp_raw);
+			//FetchGyro(gyro_raw);
+
+
+			delay(20);
 		}
 
 	}else{
@@ -105,18 +117,13 @@ int main(){
 void FetchAcc(short acc_raw[]){
 
 	int fd = wiringPiI2CSetup(ACC_ADD);
-	s=shm+1;
-	*s = wiringPiI2CReadReg8(fd, ACC_X0);
-	s=shm+2;
-	*s = wiringPiI2CReadReg8(fd, ACC_X1);
-	s=shm+3;
-	*s = wiringPiI2CReadReg8(fd, ACC_Y0);
-	s=shm+4;
-	*s = wiringPiI2CReadReg8(fd, ACC_Y1);
-	s=shm+5;
-	*s = wiringPiI2CReadReg8(fd, ACC_Z0);
-	s=shm+6;
-	*s = wiringPiI2CReadReg8(fd, ACC_Z1);
+	acc_raw[0] = wiringPiI2CReadReg8(fd, ACC_X0);
+	acc_raw[1] = wiringPiI2CReadReg8(fd, ACC_X1);
+	acc_raw[2] = wiringPiI2CReadReg8(fd, ACC_Y0);
+	acc_raw[3] = wiringPiI2CReadReg8(fd, ACC_Y1);
+	acc_raw[4] = wiringPiI2CReadReg8(fd, ACC_Z0);
+	acc_raw[5] = wiringPiI2CReadReg8(fd, ACC_Z1);
+
 
 }
 
