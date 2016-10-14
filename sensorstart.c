@@ -1,6 +1,11 @@
 #include <wiringPiI2C.h>
 #include <wiringPi.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <stddef.h>
 #include <stdio.h>
+#include <unistd.h>
 
 	char ACC_ADD = 0x53;
 		char ACC_X0 = 0x32;
@@ -35,47 +40,60 @@ void FetchAcc(short acc_raw[]);	//Fetches raw data from ADXL345 accelerometer
 
 void FetchComp(short comp_raw[]);	//Fetches raw data from HMC5883L magnetometer
 
+void FetchGyro(short gyro_raw[]);	//Fetches raw dara from ITG3200
+
+void CaliGyro();	//Samples and calibrates the gyroscope by modifying offsets
+
 void SetupSensors();	//Sets sensors for measurments
 
 int TestSensors();		//Checks sensors are working
 
+char *shm, *s;
 
 int main(){
 
+	key_t key;
+	int shmid;
+	int size;
+	
+	key = 2000;
+
+	char *shm, *s;
+	size = 42;
+
 	short acc_raw[3];
 	short comp_raw[3];
-	int fd1;
+	short gyro_raw[3];
+
+
+	if((shmid = shmget(key, size, IPC_CREAT | 0666)) < 0){
+		perror("shmget");
+	}
+
+	if((shm = shmat(shmid, NULL, 0)) == (char *) -1){
+		perror("shmat");
+	}
+
+	s = shm;
+	*s = 0;
 
 	if(TestSensors()){
 
-		fd1 = wiringPiI2CSetup(0x50);
-		wiringPiI2CWriteReg8(fd1, 0x00, 0x66);
 		printf("\nDONE!\n");
 
 		SetupSensors();
 
-		//for(;;){
+		for(;;){
 
 			FetchAcc(acc_raw);
 			FetchComp(comp_raw);
-
-			fd1 = wiringPiI2CSetup(0x50);
-			wiringPiI2CWriteReg16(fd1, 0x10, acc_raw[0]);
-			delay(2);
-			fd1 = wiringPiI2CSetup(0x50);
-			wiringPiI2CWriteReg16(fd1, 0x20, acc_raw[1]);
-			printf("\n%d", acc_raw[1]);
-			delay(2);
-			fd1 = wiringPiI2CSetup(0x50);
-			wiringPiI2CWriteReg16(fd1, 0x30, acc_raw[2]);
+			FetchGyro(gyro_raw);
 
 			delay(2);
-		//}
+		}
 
 	}else{
-
-		//fd1 = wiringPiI2CSetup(0x50);
-		//wiringPiI2CWriteReg8(fd1, 0x00, 0);
+		printf("\n FATAL ERROR");
 
 	}
 
@@ -85,10 +103,20 @@ int main(){
 
 
 void FetchAcc(short acc_raw[]){
+
 	int fd = wiringPiI2CSetup(ACC_ADD);
-	acc_raw[0] = wiringPiI2CReadReg16(fd, ACC_X0);
-	acc_raw[1] = wiringPiI2CReadReg16(fd, ACC_Y0);
-	acc_raw[2] = wiringPiI2CReadReg16(fd, ACC_Z0);
+	s=shm+1;
+	*s = wiringPiI2CReadReg8(fd, ACC_X0);
+	s=shm+2;
+	*s = wiringPiI2CReadReg8(fd, ACC_X1);
+	s=shm+3;
+	*s = wiringPiI2CReadReg8(fd, ACC_Y0);
+	s=shm+4;
+	*s = wiringPiI2CReadReg8(fd, ACC_Y1);
+	s=shm+5;
+	*s = wiringPiI2CReadReg8(fd, ACC_Z0);
+	s=shm+6;
+	*s = wiringPiI2CReadReg8(fd, ACC_Z1);
 
 }
 
@@ -96,9 +124,18 @@ void FetchAcc(short acc_raw[]){
 void FetchComp(short comp_raw[]){
 
 	int fd = wiringPiI2CSetup(COMP_ADD);
-	comp_raw[0] = wiringPiI2CReadReg16(fd, COMP_X0);
-	comp_raw[1] = wiringPiI2CReadReg16(fd, COMP_Y0);
-	comp_raw[2] = wiringPiI2CReadReg16(fd, COMP_Z0);
+	s=shm+13;
+	*s = wiringPiI2CReadReg8(fd, COMP_X0);
+	s=shm+14;
+	*s = wiringPiI2CReadReg8(fd, COMP_X1);
+	s=shm+15;
+	*s = wiringPiI2CReadReg8(fd, COMP_Y0);
+	s=shm+16;
+	*s = wiringPiI2CReadReg8(fd, COMP_Y1);
+	s=shm+17;
+	*s = wiringPiI2CReadReg8(fd, COMP_Z0);
+	s=shm+18;
+	*s = wiringPiI2CReadReg8(fd, COMP_Z1);
 
 }
 
@@ -111,6 +148,11 @@ void SetupSensors(){
 		//Acc:
 		int fd2 = wiringPiI2CSetup(ACC_ADD);
 		wiringPiI2CWriteReg8(fd2, 0x2D, 0x08);	//Sets accelerometer to 2g range
+
+		//Gyro:
+		fd2 = wiringPiI2CSetup(GYRO_ADD);
+		wiringPiI2CWriteReg8(fd2, 0x16, 0x18);	//Sets gyro to 8kHz Sample Rate
+		CaliGyro();	//Calibrates gyro
 
 		//Comp
 		int fd3 = wiringPiI2CSetup(COMP_ADD);
@@ -140,3 +182,76 @@ int TestSensors(){
 	
 	return res;
 }
+
+void FetchGyro(short gyro_raw[]){
+
+	int fd = wiringPiI2CSetup(GYRO_ADD);
+	int meas;
+	int i;
+	int n=10;
+
+
+	meas=0;
+	for(i=0; i<n; i++){
+		meas= meas + wiringPiI2CReadReg16(fd, GYRO_X0);
+	}
+	gyro_raw[0] = (meas/n) + gyrox_offset;
+	
+	s=shm+7;		
+	*s = (unsigned char)(gyro_raw[0]>>8);
+	s=shm+8;
+	*s = (unsigned char) gyro_raw[0] & 0xf;
+
+	meas=0;
+	for(i=0; i<n; i++){
+		meas= meas + wiringPiI2CReadReg16(fd, GYRO_Y0);
+	}
+	gyro_raw[1] = (meas/n) + gyroy_offset;
+
+	s=shm+9;		
+	*s = (unsigned char)(gyro_raw[1]>>8);
+	s=shm+10;
+	*s = (unsigned char) gyro_raw[1] & 0xf;
+
+	meas=0;
+	for(i=0; i<n; i++){
+		meas= meas + wiringPiI2CReadReg16(fd, GYRO_Z0);
+	}
+	gyro_raw[2] = (meas/n) + gyroz_offset;
+
+	s=shm+11;		
+	*s = (unsigned char)(gyro_raw[2]>>8);
+	s=shm+12;
+	*s = (unsigned char) gyro_raw[2] & 0xff;
+
+
+}
+
+void CaliGyro(){
+
+	int i;
+	int n=1000;
+	int meas;
+
+	int fd = wiringPiI2CSetup(GYRO_ADD);
+
+	meas=0;
+	for(i=0; i<n; i++){
+		meas= meas + wiringPiI2CReadReg16(fd, GYRO_X0);
+	}
+	gyrox_offset = -(meas/n);
+
+	meas=0;
+	for(i=0; i<n; i++){
+		meas= meas + wiringPiI2CReadReg16(fd, GYRO_Y0);
+	}
+	gyroy_offset = -(meas/n);
+
+	meas=0;
+	for(i=0; i<n; i++){
+		meas= meas + wiringPiI2CReadReg16(fd, GYRO_Z0);
+	}
+	gyroz_offset = -(meas/n);
+
+}
+
